@@ -1,7 +1,7 @@
 # The Kirsch Stress Index (KSI)
 
 ## Introduction
-The goal of the Kirsch Stress Index (KSI) is to measure the psychological stress level of a chess player at any given point of a game. It operates on a simple 0-100 scale, where `0` is equivalent to a dead-drawn endgame and `100` is the agonizing final moments just before resignation or blundering away a won game.
+The goal of the Kirsch Stress Index (KSI) is to measure the psychological stress level of a chess player at any given point of a game. It operates on a simple 0-100 scale, where `0` is equivalent to a dead-drawn endgame and `100` is the agonizing final moments just before resignation.
 
 ## The Components
 KSI is the combination of several individual metrics:
