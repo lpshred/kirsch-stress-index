@@ -86,68 +86,80 @@ This block simulates the next turn to find the moves that will spike the opponen
 > ⚠️ **Disclaimer on Predictive Discrepancies:** To keep the script running fast enough for live broadcasts, the Chaos Simulator calculates these future metrics using a blistering **0.5-second** search and a narrower **Top 5** move width, while actual turns are calculated with a full **2.0-second** search and a **Top 10** move width. Because of this "Horizon Effect" and simulated tunnel vision, the predicted KSI spike and Win Probability for a Chaos Move might be slightly different than the *actual* metrics once the opponent's turn officially begins. View this block as "Predictive Stress" rather than absolute truth.
 ---
 
-## How to Generate KSI and Other Metrics
+## 🛠️ Installation & Setup
 
-I've included the Python script that I use to generate KSI metrics for both finished and live games. If you feed it a PGN file, you can calculate the metrics automatically.
+KSI runs locally on your machine. Because it uses powerful chess engines to evaluate human psychology, there is a one-time setup process. **No coding experience is required.**
 
-### Prerequisites
-1. **Python 3:** Ensure you have Python installed.
-2. **Python-Chess:** Install the required library via terminal: `pip install chess`
-3. **Stockfish:** Download the [Stockfish executable](https://stockfishchess.org/download/) (AVX2 recommended for modern CPUs).
-4. **Lc0 & Maia:** Download the [Lc0 executable](https://lczero.org/play/download/) and the [Maia 2200 weights file](https://github.com/CSSLab/maia-chess).
+### Step 1: Install Python & KSI
+1. Ensure you have [Python 3.8+](https://www.python.org/downloads/) installed. 
+2. Clone this repository (or download it as a ZIP file):
+   ```bash
+   git clone https://github.com/YOUR-USERNAME/kirsch-stress-index.git
+   cd kirsch-stress-index
+   ```
+3. Install the required Python packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### The Two Workflows (Broadcasters vs. Reviewers)
+### Step 2: Download the Engines (Stockfish & Maia)
+KSI requires two engines to calculate psychological stress: **Stockfish** (to find the cold, objective truth of a position) and **Lc0 + Maia** (a neural network trained on millions of human games to predict what a *human* would actually do).
 
-Depending on your content needs, there are two primary ways to run the KSI suite. 
+**1. Stockfish:**
+* Download the latest Stockfish binary for your operating system from the [official website](https://stockfishchess.org/download/). (AVX2 recommended for modern CPUs).
+* Extract all of the files and place them into the `engines/stockfish/` folder.
 
-**1. The "Live Broadcaster" Workflow**
-If you are streaming a game live, you want the script running in `live` mode. It watches a PGN file for updates and calculates the pressure on the current player *while they are thinking*. Because it only calculates one move every few seconds, it runs the full suite of predictive Chaos Move simulations.
+**2. Lc0 (Leela Chess Zero) & Maia Weights:**
+* Download the latest Lc0 release for your system from the [Lc0 GitHub](https://github.com/LeelaChessZero/lc0/releases).
+* Download the **Maia 2200** weights file (`maia-2200.pb.gz`) from the [Maia Chess website](https://lczero.org/play/networks/sparring-nets/).
+* Place all of the `lc0` files and the `maia-2200.pb.gz` file into the `engines/lc0/` folder.
+
+*(Note: If you place the engines in these exact folders, the script will find them automatically! If you put them somewhere else, you will need to manually pass their paths using the `--sf`, `--lc0`, and `--weights` flags).*
+
+---
+
+## 🚀 Usage
+
+The entire KSI suite is controlled by a single master wrapper script: `ksi.py`. It handles all file management, automatically launches the web dashboard, and generates narrative storyboards. It features three distinct modes depending on how you want to analyze a game.
+
+### 1. Live Mode (Real-Time Broadcasts)
+*Best for: Watching a live tournament (like the Candidates) with a real-time dashboard on your second monitor.*
+
+Provide a direct URL to a live-updating PGN (like a Lichess broadcast). KSI will continuously download the moves, evaluate them the second they are played, and host a live-updating web dashboard.
+
 ```bash
-python ksi_evaluator.py --mode live --tc classical --pgn chess.pgn --sf path/to/stockfish.exe --lc0 path/to/lc0.exe --weights path/to/maia-2200.pb.gz
+python ksi.py --mode live --url "https://lichess.org/api/broadcast/game/url.pgn"
+```
+*Once running, the script should automatically open your web browser to `http://127.0.0.1:8050/` to watch the live KSI graph.*
+*For in progress games, the script will start up at the most recent move. To calcuate metrics starting from the beginning of the game, pass in the `--no-ff` flag.*
+
+
+### 2. Full Mode (Batch Processing Finished Games)
+*Best for: YouTube reviewers or deep-diving into a completed game.*
+
+Provide a local PGN file. KSI will process the entire game from start to finish. Once complete, it will automatically open a **Markdown Storyboard** detailing the psychological turning points of the match, launch the interactive dashboard, and save all data neatly into a new folder inside the `games/` directory.
+
+```bash
+python ksi.py --mode full --pgn sample_game.pgn --fast
+```
+*(Note: It is highly recommended to use the `--fast` flag for full games. This skips the heavy Chaos Move simulations, reducing the processing time of a full game from ~15 minutes down to ~2 minutes).*
+
+### 3. Archive Mode (Instant Dashboard Loading)
+*Best for: Reviewing games you've already processed.*
+
+If you want to look at a game you processed yesterday, you don't need to re-run the engines. Just point Archive Mode at the game's folder inside your `games/` directory, and it will instantly load the dashboard and storyboard.
+
+```bash
+python ksi.py --mode archive --dir games/PlayerA_vs_PlayerB_20260410_093922
 ```
 
-**2. The "YouTube Reviewer" Workflow**
-If the game is already finished and you are recording a recap video, you want the script running in `full` mode to generate your storyboard graph. **It is highly recommended to pass the `--fast` flag.** This skips the heavy Chaos Move simulations, reducing the processing time of a full game from ~15 minutes down to ~2 minutes. 
-```bash
-python ksi_evaluator.py --mode full --fast --tc classical --pgn chess.pgn --sf path/to/stockfish.exe --lc0 path/to/lc0.exe --weights path/to/maia-2200.pb.gz
-```
-
-### CSV Telemetry Export
-By default, the script silently logs turn-by-turn telemetry (KSI, Win Probability, Clock Time, Top Moves, etc.) to a file named `chess.csv` in the same directory. This CSV is what powers the Visualizer dashboard. 
-
-> ⚠️ **Important Note on Live Tailing:** By default, live mode uses "fast-forwarding" to skip historical moves and catch up to the live edge immediately. **Skipped moves are not calculated and will not be written to the CSV.** If you are starting the script in the middle of a live game and want the *entire* game history written to the CSV for your dashboard, you must pass the `--no-ff` flag. 
-
-**Optional Arguments:**
+### Optional Arguments
+You can customize the engine's behavior by passing these flags to `ksi.py`:
 * `--fast`: Skips the Chaos Move simulations. Crucial for fast processing of finished games.
 * `--tc classical`: Sets the time control engine. Options are `classical` (FIDE 120m/40 moves), `rapid`, `blitz`, or `auto`. Defaults to `auto`.
-* `--csv game_data.csv`: Changes the name of the output CSV file (defaults to `chess.csv`).
-* `--output analysis.txt`: Saves the terminal UI output to a clean, ANSI-stripped text file.
-* `--threads 8`: Allocates specific CPU threads to Stockfish (highly recommended for performance).
-* `--poll 5`: Changes the live PGN polling interval (in seconds).
-* `--no-ff`: Disables fast-forwarding in live mode, forcing the engine to analyze and log every historical move before reaching the live edge.
-
-### The Live Broadcast Suite (3-Terminal Setup)
-
-If you are watching a live tournament (like the Candidates) and want a real-time, auto-updating dashboard on your second monitor, you can use the complete KSI Suite. This requires running three separate scripts in three different terminal windows. They are designed to seamlessly hand data off to each other using default filenames (`chess.pgn` and `chess.csv`).
-
-**Terminal 1: The Fetcher**
-This script continuously downloads the live game from Lichess (or any direct PGN URL) every 10 seconds and saves it to `chess.pgn`.
-```bash
-python ksi_fetcher.py "https://lichess.org/api/broadcast/game/url.pgn"
-```
-
-**Terminal 2: The Evaluator**
-This is the heavy-lifting engine. It watches the `chess.pgn` file for new moves, calculates the psychological metrics using Stockfish and Maia, outputs the terminal UI, and silently logs the data to `chess.csv`.
-```bash
-python ksi_evaluator.py --mode live --sf path/to/stockfish.exe --lc0 path/to/lc0.exe --weights path/to/maia-2200.pb.gz
-```
-
-**Terminal 3: The Visualizer**
-This script launches a local web server, reads `chess.csv`, and generates a beautiful, interactive Plotly dashboard. It automatically refreshes the graph every few seconds as new moves are played.
-```bash
-python ksi_visualizer.py --mode live
-```
-*Once running, open your web browser to `http://127.0.0.1:8050/` to watch the live KSI graph.*
+* `--no-ff`: Disables fast-forwarding in live mode, forcing the engine to analyze and log every historical move before catching up to the live edge.
+* `--threads 8`: Allocates specific CPU threads to Stockfish (highly recommended for performance). Defaults to 8.
+* `--poll 3`: Changes how often the script checks the live URL for new moves (in seconds). Defaults to 3.
 
 ---
 
@@ -335,13 +347,10 @@ Ultimately, the Chaos Metric should be viewed as a highly educated guess of how 
 My initial goal was to model human move probabilities based on running a Monte Carlo simulation through the Lc0/Maia engine to dynamically calculate the probabilities in real-time. Unfortunately, the UCI Python library this script uses makes it incredibly difficult to extract raw neural network policy weights from Maia. Instead, I had to use a rank-based exponential decay to determine the probability of Maia's top 5 moves. It's not perfect, but I'm satisified with the trade-off. True dynamic calculations would still be gold standard here. Getting that data would involve writing a custom library to interface with Lc0 directly, which I determined to be out of the scope of this project and well beyond my vibe-coding enhanced abilities.
 
 ### Better Player Rating Scaling
-I built KSI and this script to help me follow the 2026 Candidates Tournament. Because of this, I chose the best Maia database I could find (2200 Elo) and hardcoded the baseline anchor to represent a 2800 Elo Super-GM. If you run this script on a 1500-rated game, it will apply the vision strength of a 2800-rated player to them. For better scaling, you would want to use a more appropriate Maia database and dynamically pass the players' ratings into the baseline formula. 
+I built KSI and this script to help me follow the 2026 Candidates Tournament. Because of this, I chose the best Maia database I could find (2200 Elo) and hardcoded the baseline anchor to represent a 2800 Elo Super-GM. If you run this script on a 1500-rated game, it will apply the vision strength of a 2200-rated player to them. For better scaling, you would want to use a more appropriate Maia database and dynamically pass the players' ratings into the baseline formula. 
 
 ### Incorporating Tiredness
-I considered including a metric for tiredness, as players often cite fatigue in interviews as explanations for their blunders or decisions to settle for a draw. I decided against implementing this because it felt too arbitrary, and both players have generally been playing the same amount of time. I was also nearing my own personal context limits for the growing complexity of this script. For someone more enterprising than myself, tiredness is likely the best new source of stress to incorporate into this metric next.
-
-### Other Time Controls
-I built this metric and script to analyze games under classical time controls live while watching a broadcast. Thanks to recent optimizations (engine batching and circuit breakers), the script can process a live turn in just a few seconds. However, adding the human time required to read and interpret the terminal output still makes it a bit too slow for live analysis of the faster Bullet or Blitz games. (Though time controls obviously wouldn't matter when analyzing finished games in batch mode).
+I considered including a metric for tiredness, as players often cite fatigue in interviews as explanations for their blunders or decisions to settle for a draw. I decided against implementing this because it felt too arbitrary, and both players have generally been playing the same amount of time. I was also nearing my own personal understanding limits for the growing complexity of this script. For someone more enterprising than myself, tiredness is likely the best new source of stress to incorporate into this metric next.
 
 ### Intent
 As I worked though some games during testing, I often wondered if a sub-optimal move was a mistake or a carefully crafted prepared move or gambit. In my estimation, mistakes are more stressful than laying a trap, so I wanted to account for that in this metric. After some brainstorming, the only thing that could make any sense would be time taken before making a move. Still, I felt that there are many other reasons for long thinks and prepared moves wouldn't take far less think. Sometimes mistakes can come even after long thinks. As such, I decided not to implement intent. If there were a better way to do estimate intent, I think it would be a worthy addition to this formula.
