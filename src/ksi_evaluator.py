@@ -13,11 +13,15 @@ class TeeLogger:
     def __init__(self, filename):
         self.terminal = sys.stdout
         self.log_file = open(filename, "w", encoding="utf-8", errors="ignore")
+        # Regex to catch all ANSI color and formatting codes
+        self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
     def write(self, message):
-        self.terminal.write(message)
+        self.terminal.write(message) # Send colored text to the terminal
         if not self.log_file.closed:
-            self.log_file.write(message)
+            # Strip the colors out before saving to the text file
+            clean_message = self.ansi_escape.sub('', message)
+            self.log_file.write(clean_message)
 
     def flush(self):
         self.terminal.flush()
@@ -27,7 +31,6 @@ class TeeLogger:
     def close(self):
         if not self.log_file.closed:
             self.log_file.close()
-        # Restore normal stdout so Python's shutdown doesn't crash trying to flush a closed file
         sys.stdout = self.terminal
 
 # --- CSV TELEMETRY EXPORTER ---
