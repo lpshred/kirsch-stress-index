@@ -12,31 +12,23 @@ import os
 class TeeLogger:
     def __init__(self, filename):
         self.terminal = sys.stdout
-        if hasattr(self.terminal, "reconfigure"):
-            try:
-                self.terminal.reconfigure(encoding='utf-8')
-            except Exception:
-                pass
-        self.log_file = open(filename, "w", encoding="utf-8")
-        self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        self.log_file = open(filename, "w", encoding="utf-8", errors="ignore")
 
     def write(self, message):
-        try:
-            self.terminal.write(message)
-        except UnicodeEncodeError:
-            safe_msg = message.encode('ascii', 'replace').decode('ascii')
-            self.terminal.write(safe_msg)
-            
-        clean_message = self.ansi_escape.sub('', message)
-        self.log_file.write(clean_message)
-        self.flush()
+        self.terminal.write(message)
+        if not self.log_file.closed:
+            self.log_file.write(message)
 
     def flush(self):
         self.terminal.flush()
-        self.log_file.flush()
-        
+        if not self.log_file.closed:
+            self.log_file.flush()
+
     def close(self):
-        self.log_file.close()
+        if not self.log_file.closed:
+            self.log_file.close()
+        # Restore normal stdout so Python's shutdown doesn't crash trying to flush a closed file
+        sys.stdout = self.terminal
 
 # --- CSV TELEMETRY EXPORTER ---
 class CSVLogger:
