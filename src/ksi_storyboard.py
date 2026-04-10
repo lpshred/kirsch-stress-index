@@ -25,6 +25,7 @@ TIGHTROPE_MAX_WP = 90.0
 
 # The Chaos Trap Settings
 CHAOS_WP_DROP_REWARD = 15.0
+PHANTOM_TRAP_MIN_DESPERATION = 20.0 
 
 # The Extremes Settings
 VERTIGO_MIN_WP = 75.0
@@ -192,9 +193,10 @@ def get_deep_tank(df):
     for player in tank_rows['Player_Name'].unique():
         player_df = tank_rows[tank_rows['Player_Name'] == player]
         top_3 = player_df.sort_values(by='Time_Spent_Sec', ascending=False).head(3)
-        top_thinks[player] = top_3
+        if not top_3.empty:
+            top_thinks[player] = top_3
         
-    return top_thinks
+    return top_thinks if top_thinks else None
 
 def get_deepest_fog(df):
     return df.loc[df['Intuitiveness'].idxmin()]
@@ -242,16 +244,34 @@ def get_tightrope_walk(df):
     return best_player, best_window_df
 
 def get_chaos_traps(df):
-    df['Next_Ply_WP_Drop'] = df['WP_Drop'].shift(-1)
+    # If the CSV was generated with --fast, Top_Chaos_Move will be empty. 
+    # We gracefully return None so the storyboard skips the block entirely.
+    if 'Top_Chaos_Move' not in df.columns or df['Top_Chaos_Move'].isna().all():
+        return None, None, None
+
+    df['Next_Ply_Intuitiveness'] = df['Intuitiveness'].shift(-1)
+    df['Next_Ply_Forgiveness'] = df['Forgiveness'].shift(-1)
+    df['Trickiness'] = df['Expected_WP'] - df['Win_Prob'] 
     
     successful = df[(df['Move_Played'] == df['Top_Chaos_Move']) & 
                     (df['Move_Played'] != df['Best_SF_Move']) & 
                     (df['WP_Drop'] < BLUNDER_WP_DROP_THRESHOLD) & 
-                    (df['Next_Ply_WP_Drop'] >= CHAOS_WP_DROP_REWARD)]
-                    
-    successful_trap = successful.loc[successful['Next_Ply_WP_Drop'].idxmax()] if not successful.empty else None
+                    (df['WP_Drop'].shift(-1) >= CHAOS_WP_DROP_REWARD)]
+    successful_trap = successful.loc[successful['WP_Drop'].shift(-1).idxmax()] if not successful.empty else None
     
-    return successful_trap
+    defused = df[(df['Move_Played'] == df['Top_Chaos_Move']) & 
+                 (df['Move_Played'] != df['Best_SF_Move']) & 
+                 (df['WP_Drop'] < BLUNDER_WP_DROP_THRESHOLD) & 
+                 (df['WP_Drop'].shift(-1) < CHAOS_WP_DROP_REWARD)]
+    defused_trap = defused.loc[defused['Trickiness'].idxmax()] if not defused.empty else None
+    
+    missed = df[(df['Move_Played'] != df['Top_Chaos_Move']) & 
+                (df['Top_Chaos_Move'].notna()) & 
+                (df['Top_Chaos_Move'] != df['Best_SF_Move']) &
+                (df['Desperation'] >= PHANTOM_TRAP_MIN_DESPERATION)]
+    phantom_trap = missed.loc[missed['WP_Drop'].idxmax()] if not missed.empty else None
+    
+    return successful_trap, defused_trap, phantom_trap
 
 def get_vertigo_spike(df):
     vertigo_rows = df[(df['Win_Prob'] >= VERTIGO_MIN_WP) & (df['Vertigo_Multiplier'] >= VERTIGO_MIN_MULT)].copy()
@@ -367,11 +387,10 @@ def get_shared_perception(df):
 # 5. THE STORY WEAVER (Markdown Generation - Introspective Tone)
 # =============================================================================
 
-def generate_markdown(df, tape_stats, climax_data, collapse_row, tank_data, fog_row, tightrope_data, successful_trap, vertigo_row, crucible_data, iron_mind_data, unpunished_data, burden_data, perception_data, input_filepath, out_filepath=None):
+def generate_markdown(df, tape_stats, climax_data, collapse_row, tank_data, fog_row, tightrope_data, traps, vertigo_row, crucible_data, iron_mind_data, unpunished_data, burden_data, perception_data, input_filepath, out_filepath=None):
     white_player = df[df['Color'] == 'White']['Player_Name'].iloc[0]
     black_player = df[df['Color'] == 'Black']['Player_Name'].iloc[0]
     
-    # Handle output routing for Phase 3 wrapper
     if out_filepath:
         filename = out_filepath
     else:
@@ -541,12 +560,19 @@ def generate_markdown(df, tape_stats, climax_data, collapse_row, tank_data, fog_
     md += "\n"
 
     # 5. CHAOS TRAPS
-    md += "---\n## 🧩 Practical Complications\n"
-    md += f"*Moves that challenged the opponent's human intuition rather than playing the objective board.*\n\n"
-    if successful_trap is not None:
-        md += f"🎯 **The Practical Success:** On Move {successful_trap['Move_Number']}, **{successful_trap['Player_Name']}** played **{successful_trap['Move_Played']}** instead of the engine's preferred {successful_trap['Best_SF_Move']}. This created practical difficulties, resulting in an immediate evaluation drop from the opponent.\n\n"
-    else:
-        md += "No significant practical complications (sub-optimal moves that induced an immediate blunder) were noted in this game.\n\n"
+    has_chaos_data = 'Top_Chaos_Move' in df.columns and not df['Top_Chaos_Move'].isna().all()
+    if has_chaos_data:
+        md += "---\n## 🧩 Practical Complications\n"
+        md += f"*Moves that challenged the opponent's human intuition rather than playing the objective board.*\n\n"
+        succ_trap, def_trap, phan_trap = traps
+        if succ_trap is not None:
+            md += f"🎯 **The Practical Success:** On Move {succ_trap['Move_Number']}, **{succ_trap['Player_Name']}** played **{succ_trap['Move_Played']}** instead of the engine's preferred {succ_trap['Best_SF_Move']}. This created practical difficulties, resulting in an immediate evaluation drop from the opponent.\n\n"
+        if def_trap is not None:
+            md += f"🛡️ **The Defused Complication:** On Move {def_trap['Move_Number']}, **{def_trap['Player_Name']}** attempted to complicate the position with **{def_trap['Move_Played']}**. While tricky, their opponent found the correct response and maintained the advantage.\n\n"
+        if phan_trap is not None:
+            md += f"👻 **The Missed Complication:** On Move {phan_trap['Move_Number']}, facing a difficult position, the engine identified **{phan_trap['Top_Chaos_Move']}** as a move that could create practical problems. Instead, **{phan_trap['Player_Name']}** opted for **{phan_trap['Move_Played']}**, which resulted in a Win Probability drop of {phan_trap['WP_Drop']:.1f}%.\n\n"
+        if not any([succ_trap is not None, def_trap is not None, phan_trap is not None]):
+            md += "No significant practical complications or deviations were noted in this game.\n\n"
 
     # 6. VERTIGO SPIKE
     md += "---\n## 🌀 The Vertigo Effect\n"
@@ -640,14 +666,14 @@ if __name__ == "__main__":
         
         fog_row = get_deepest_fog(df)
         tightrope_data = get_tightrope_walk(df)
-        successful_trap = get_chaos_traps(df)
+        traps = get_chaos_traps(df)
         vertigo_row = get_vertigo_spike(df)
         crucible_data = get_crucible(df)
         iron_mind_data = get_iron_mind(df)
         
         generate_markdown(
             df, tape_stats, climax_data, collapse_row, tank_data, fog_row, 
-            tightrope_data, successful_trap, vertigo_row, crucible_data, 
+            tightrope_data, traps, vertigo_row, crucible_data, 
             iron_mind_data, unpunished_data, burden_data, perception_data, 
             args.filepath, args.out
         )
