@@ -88,39 +88,67 @@ This block simulates the next turn to find the moves that will spike the opponen
 
 ## 🛠️ Installation & Setup
 
-KSI runs locally on your machine. Because it uses powerful chess engines to evaluate human psychology, there is a one-time setup process. **No coding experience is required.**
+KSI runs locally on your machine. Because it uses powerful chess engines to evaluate human psychology, there is a one-time setup process. **No coding experience is required, but instructions differ slightly depending on your operating system.**
 
-### Step 1: Install Python & KSI
-1. Ensure you have [Python 3.8+](https://www.python.org/downloads/) installed. 
-2. Clone this repository (or download it as a ZIP file):
+### Step 1: Install Python
+Ensure you have **Python 3.12+** installed. *(Note: Python 3.12 or newer is strictly required due to the modern string formatting used in the code).*
+* Download from [Python.org](https://www.python.org/downloads/).
+
+### Step 2: Download KSI & Install Packages
+
+**🪟 FOR WINDOWS USERS:**
+1. Clone this repository (or download it as a ZIP file and extract it):
    ```bash
    git clone https://github.com/YOUR-USERNAME/kirsch-stress-index.git
    cd kirsch-stress-index
    ```
-3. Install the required Python packages:
+2. Install the required packages:
    ```bash
    pip install -r requirements.txt
    ```
 
-### Step 2: Download the Engines (Stockfish & Maia)
-KSI requires two engines to calculate psychological stress: **Stockfish** (to find the cold, objective truth of a position) and **Lc0 + Maia** (a neural network trained on millions of human games to predict what a *human* would actually do).
+**🍎 FOR MAC USERS:**
+Modern Macs require Python packages to be installed inside a "virtual environment" to protect your system files.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/YOUR-USERNAME/kirsch-stress-index.git
+   cd kirsch-stress-index
+   ```
+2. Create and activate a safe virtual environment:
+   ```bash
+   python3.12 -m venv ksi_env
+   source ksi_env/bin/activate
+   ```
+   *(Note: You must run `source ksi_env/bin/activate` anytime you open a new terminal to use KSI).*
+3. Install the required packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-**1. Stockfish:**
-* Download the latest Stockfish binary for your operating system from the [official website](https://stockfishchess.org/download/). (AVX2 recommended for modern CPUs).
-* Extract all of the files and place them into the `engines/stockfish/` folder.
+### Step 3: Download the Engines (Stockfish & Maia)
+KSI requires two engines to calculate psychological stress: **Stockfish** (objective truth) and **Lc0 + Maia** (human instinct).
 
-**2. Lc0 (Leela Chess Zero) & Maia Weights:**
-* Download the latest Lc0 release for your system from the [Lc0 GitHub](https://github.com/LeelaChessZero/lc0/releases).
-* Download the **Maia 2200** weights file (`maia-2200.pb.gz`) from the [Maia Chess website](https://lczero.org/play/networks/sparring-nets/).
-* Place all of the `lc0` files and the `maia-2200.pb.gz` file into the `engines/lc0/` folder.
+**🪟 FOR WINDOWS USERS:**
+1. **Stockfish:** Download the latest binary from the [official website](https://stockfishchess.org/download/) (AVX2 recommended). Extract the `.exe` and place it into the `engines/stockfish/` folder.
+2. **Lc0 & Maia:** Download the latest Lc0 release from the [Lc0 GitHub](https://github.com/LeelaChessZero/lc0/releases). Download the **Maia 2200** weights file (`maia-2200.pb.gz`) from the [Maia Chess repository](https://github.com/CSSLab/maia-chess). Place both files into the `engines/lc0/` folder.
 
-*(Note: If you place the engines in these exact folders, the script will find them automatically! If you put them somewhere else, you will need to manually pass their paths using the `--sf`, `--lc0`, and `--weights` flags).*
+**🍎 FOR MAC USERS:**
+Mac makes it incredibly easy to install engines using **Homebrew**.
+1. Open your terminal and install both engines via Homebrew:
+   ```bash
+   brew install stockfish
+   brew install lc0
+   ```
+2. You still need the "Human Brain" weights. Download the **Maia 2200** weights file (`maia-2200.pb.gz`) from the [Maia Chess repository](https://github.com/CSSLab/maia-chess). Place this file into your `kirsch-stress-index/engines/lc0/` folder.
 
 ---
 
 ## 🚀 Usage
 
 The entire KSI suite is controlled by a single master wrapper script: `ksi.py`. It handles all file management, automatically launches the web dashboard, and generates narrative storyboards. It features three distinct modes depending on how you want to analyze a game.
+
+> 🍎 **Mac Users - Crucial Note:** Because Homebrew installed your engines in a hidden system folder, you **must** append these flags to the end of your run commands so the script can find them:
+> `--sf /opt/homebrew/bin/stockfish --lc0 /opt/homebrew/bin/lc0`
 
 ### 1. Live Mode (Real-Time Broadcasts)
 *Best for: Watching a live tournament (like the Candidates) with a real-time dashboard on your second monitor.*
@@ -130,9 +158,7 @@ Provide a direct URL to a live-updating PGN (like a Lichess broadcast). KSI will
 ```bash
 python ksi.py --mode live --url "https://lichess.org/api/broadcast/game/url.pgn"
 ```
-*Once running, the script should automatically open your web browser to `http://127.0.0.1:8050/` to watch the live KSI graph.*
-*For in progress games, the script will start up at the most recent move. To calcuate metrics starting from the beginning of the game, pass in the `--no-ff` flag.*
-
+*Once running, open your web browser to `http://127.0.0.1:8050/` to watch the live KSI graph.*
 
 ### 2. Full Mode (Batch Processing Finished Games)
 *Best for: YouTube reviewers or deep-diving into a completed game.*
@@ -158,7 +184,7 @@ You can customize the engine's behavior by passing these flags to `ksi.py`:
 * `--fast`: Skips the Chaos Move simulations. Crucial for fast processing of finished games.
 * `--tc classical`: Sets the time control engine. Options are `classical` (FIDE 120m/40 moves), `rapid`, `blitz`, or `auto`. Defaults to `auto`.
 * `--no-ff`: Disables fast-forwarding in live mode, forcing the engine to analyze and log every historical move before catching up to the live edge.
-* `--threads 8`: Allocates specific CPU threads to Stockfish (highly recommended for performance). Defaults to 8.
+* `--threads 8`: Allocates specific CPU threads to Stockfish. Defaults to 8. **(🍎 Mac Air Users: Change this to `--threads 4` to prevent your fanless laptop from overheating!)**
 * `--poll 3`: Changes how often the script checks the live URL for new moves (in seconds). Defaults to 3.
 
 ---
