@@ -17,11 +17,12 @@ class TeeLogger:
         self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
     def write(self, message):
-        self.terminal.write(message) # Send colored text to the terminal
+        self.terminal.write(message) 
         if not self.log_file.closed:
-            # Strip the colors out before saving to the text file
             clean_message = self.ansi_escape.sub('', message)
             self.log_file.write(clean_message)
+            self.log_file.flush()  # <--- NEW: Forces the OS to write to disk instantly
+            os.fsync(self.log_file.fileno()) # <--- NEW: Guarantees macOS updates the file size immediately
 
     def flush(self):
         self.terminal.flush()
